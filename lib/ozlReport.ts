@@ -1,6 +1,4 @@
 // Логика отчёта ОЗЛ.
-// Читает таблицу-мост (IMPORTRANGE из закрытой таблицы, вкладка "общий"),
-// отбирает заказы по 4 статусам и собирает текстовый отчёт по карте статусов.
 
 export const COL = {
   order: 0,     // A
@@ -13,12 +11,23 @@ export const COL = {
   blDate: 63,   // BL
 } as const;
 
+// Эталонные статусы (в нижнем регистре, сравнение регистронезависимое).
 export const STATUS = {
-  bought: "Выкуплен",
-  factoryReplace: "Замена на фабрике",
-  shouldBeWarehouse: "Должен быть на складе",
-  qcFailed: "Не прошёл КК",
+  bought: "выкуплен",
+  factoryReplace: "замена на фабрике",
+  shouldBeWarehouse: "должен быть на складе",
+  qcFailed: "не прошел контроль качества",
 } as const;
+
+// Нормализация статуса для сравнения: нижний регистр, ё->е, схлопнуть пробелы.
+function normStatus(s: string): string {
+  return (s || "")
+    .toString()
+    .toLowerCase()
+    .replace(/ё/g, "е")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export function parseRuDate(s: string): Date | null {
   const m = s.trim().match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{2,4})$/);
@@ -90,7 +99,7 @@ function head(row: string[]): string {
 }
 
 export function buildLine(row: string[]): ReportLine | null {
-  const status = (row[COL.status] || "").toString().trim();
+  const status = normStatus(row[COL.status]);
   const t = today();
 
   if (status === STATUS.bought) {
@@ -142,7 +151,7 @@ const GROUP_ORDER: { status: string; title: string }[] = [
   { status: STATUS.bought, title: "ВЫКУПЛЕН" },
   { status: STATUS.factoryReplace, title: "ЗАМЕНА НА ФАБРИКЕ" },
   { status: STATUS.shouldBeWarehouse, title: "ДОЛЖЕН БЫТЬ НА СКЛАДЕ" },
-  { status: STATUS.qcFailed, title: "НЕ ПРОШЁЛ КК" },
+  { status: STATUS.qcFailed, title: "НЕ ПРОШЁЛ КОНТРОЛЬ КАЧЕСТВА" },
 ];
 
 export function buildReport(rows: string[][]): { html: string; count: number } {
@@ -153,7 +162,7 @@ export function buildReport(rows: string[][]): { html: string; count: number } {
   let total = 0;
 
   for (const row of rows) {
-    const status = (row[COL.status] || "").toString().trim();
+    const status = normStatus(row[COL.status]);
     const line = buildLine(row);
     if (!line) continue;
     if (!groups[status]) groups[status] = [];
