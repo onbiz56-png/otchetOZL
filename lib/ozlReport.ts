@@ -102,10 +102,12 @@ export function buildLine(row: string[]): ReportLine | null {
   const status = normStatus(row[COL.status]);
   const t = today();
 
-  if (status === STATUS.bought) {
+ if (status === STATUS.bought) {
     const first = firstDate(row[COL.atDates]);
     const last = lastDate(row[COL.atDates]);
-    if (!first) return null;
+    if (!first) {
+      return { text: `${head(row)}, плановая дата не указана`, bold: false };
+    }
     if (diffDays(t, first) > 0) {
       return { text: `${head(row)}, плановая дата ${formatRuDate(first)}`, bold: false };
     } else {
@@ -113,7 +115,6 @@ export function buildLine(row: string[]): ReportLine | null {
       return { text: `❗${head(row)}, поставщик задерживает отправку, плановая дата ${formatRuDate(d)}`, bold: true };
     }
   }
-
   if (status === STATUS.factoryReplace) {
     const bl = firstDate(row[COL.blDate]);
     if (!bl) return null;
