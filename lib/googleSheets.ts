@@ -26,7 +26,7 @@ export function getSheetsClient() {
 }
 
 export function getSpreadsheetId(): string {
-  const id = process.env.GOOGLE_SHEET_ID;
+  const id = process.env.GOOGLE_SHEET_ID?.trim();
   if (!id) throw new Error("Не задан GOOGLE_SHEET_ID в переменных окружения");
   return id;
 }
