@@ -5,7 +5,7 @@ import { buildReport } from "@/lib/ozlReport";
 import { sendTelegramMessage } from "@/lib/telegram";
 
 // Вкладка в таблице-мосте, куда IMPORTRANGE тянет данные из закрытой таблицы.
-const BRIDGE_TAB = "отчёт для ОЗЛ";
+const BRIDGE_TAB = "отчет для ОЗЛ";
 
 export async function POST(req: NextRequest) {
   const authError = requireTelegramAuth(req);
