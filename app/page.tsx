@@ -24,6 +24,12 @@ export default function Home() {
   const [reportWarning, setReportWarning] = useState<string | null>(null);
   const [reportSending, setReportSending] = useState(false);
 
+  const [ozlOpen, setOzlOpen] = useState(false);
+  const [ozlHtml, setOzlHtml] = useState<string>("");
+  const [ozlCount, setOzlCount] = useState<number>(0);
+  const [ozlLoading, setOzlLoading] = useState(false);
+  const [ozlSending, setOzlSending] = useState(false);
+
   useEffect(() => {
     if (!ready) return;
     (async () => {
@@ -136,6 +142,55 @@ export default function Home() {
     }
   }
 
+  async function openOzlPreview() {
+    setOzlLoading(true);
+    setOzlOpen(true);
+    try {
+      const res = await apiFetch("/api/ozl");
+      const data = await res.json();
+      if (data.error) {
+        setOzlHtml("Ошибка: " + data.error);
+        setOzlCount(0);
+      } else {
+        setOzlHtml(data.html || "");
+        setOzlCount(data.count || 0);
+      }
+    } catch (e) {
+      console.error(e);
+      setOzlHtml("Не удалось загрузить отчёт");
+    } finally {
+      setOzlLoading(false);
+    }
+  }
+
+  async function confirmSendOzl() {
+    setOzlSending(true);
+    try {
+      await apiFetch("/api/ozl", { method: "POST" });
+      setOzlOpen(false);
+      setToast("Отчёт ОЗЛ отправлен");
+      setTimeout(() => setToast(null), 1800);
+    } catch (e) {
+      console.error(e);
+      setToast("Не удалось отправить отчёт ОЗЛ");
+      setTimeout(() => setToast(null), 2000);
+    } finally {
+      setOzlSending(false);
+    }
+  }
+
+  function ozlToDisplay(html: string): { text: string; bold: boolean }[] {
+    return html.split("\n").map((line) => {
+      const bold = /^<b>.*<\/b>$/.test(line);
+      const text = line
+        .replace(/<\/?b>/g, "")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
+      return { text, bold };
+    });
+  }
+
   return (
     <div className="page">
       <div className="pageTitle">Ежедневный отчёт</div>
@@ -161,6 +216,16 @@ export default function Home() {
           onClick={openReportPreview}
         >
           Ежедневный отчёт сдан
+        </button>
+      )}
+
+      {!loading && (
+        <button
+          className="button buttonSecondary"
+          style={{ width: "100%", marginTop: 8 }}
+          onClick={openOzlPreview}
+        >
+          Отчёт ОЗЛ
         </button>
       )}
 
@@ -190,6 +255,51 @@ export default function Home() {
           onConfirm={confirmSendReport}
           onCancel={() => setReportOpen(false)}
         />
+      )}
+
+      {ozlOpen && (
+        <div className="overlay">
+          <div className="sheet">
+            <div className="sheetTitle">Отчёт ОЗЛ на сегодня</div>
+            {ozlLoading ? (
+              <div style={{ padding: "20px 0", textAlign: "center", color: "#8a8a8a" }}>
+                Загружаю данные из таблицы...
+              </div>
+            ) : (
+              <div style={{ maxHeight: "50vh", overflowY: "auto", marginBottom: 8 }}>
+                {ozlToDisplay(ozlHtml).map((line, i) =>
+                  line.text === "" ? (
+                    <div key={i} style={{ height: 8 }} />
+                  ) : (
+                    <div
+                      key={i}
+                      style={{
+                        fontSize: 13.5,
+                        lineHeight: 1.4,
+                        fontWeight: line.bold ? 700 : 400,
+                        padding: "2px 0",
+                      }}
+                    >
+                      {line.text}
+                    </div>
+                  )
+                )}
+              </div>
+            )}
+            <div className="sheetActions">
+              <button className="button buttonSecondary" onClick={() => setOzlOpen(false)} disabled={ozlSending}>
+                Закрыть
+              </button>
+              <button
+                className="button buttonPrimary"
+                onClick={confirmSendOzl}
+                disabled={ozlSending || ozlLoading || ozlCount === 0}
+              >
+                {ozlSending ? "Отправка..." : "Отправить в Telegram"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && <div className="toast">{toast}</div>}
