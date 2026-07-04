@@ -106,7 +106,7 @@ export function buildLine(row: string[]): ReportLine | null {
     const first = firstDate(row[COL.atDates]);
     const last = lastDate(row[COL.atDates]);
     if (!first) return null;
-    if (diffDays(t, first) > 3) {
+    if (diffDays(t, first) > 0) {
       return { text: `${head(row)}, плановая дата ${formatRuDate(first)}`, bold: false };
     } else {
       const d = last ?? first;
