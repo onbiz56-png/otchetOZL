@@ -1,50 +1,52 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireTelegramAuth } from "@/lib/requireAuth";
-import { getSheetsClient, getSpreadsheetId, cellA1 } from "@/lib/googleSheets";
-import { ensureTabForDate } from "@/lib/sheetTab";
-import { findField, KEY_REPORT_FIELD_IDS, REPORT_SUBMITTED_ROW } from "@/lib/categories";
+import { getOzlBridgeId, readRange } from "@/lib/googleSheets";
+import { buildReport } from "@/lib/ozlReport";
 import { sendTelegramMessage } from "@/lib/telegram";
+
+// Вкладка в таблице-мосте, куда IMPORTRANGE тянет данные из закрытой таблицы.
+const BRIDGE_TAB = "отчёт для ОЗЛ";
 
 export async function POST(req: NextRequest) {
   const authError = requireTelegramAuth(req);
   if (authError) return authError;
 
-  const today = new Date();
-  const day = today.getDate();
-  const tabTitle = await ensureTabForDate(today);
+  const bridgeId = getOzlBridgeId();
 
-  const sheets = getSheetsClient();
-  const spreadsheetId = getSpreadsheetId();
-
-  const ranges = KEY_REPORT_FIELD_IDS.map((id) => cellA1(tabTitle, findField(id)!.row, day));
-  const res = await sheets.spreadsheets.values.batchGet({ spreadsheetId, ranges });
-
-  const dateStr = today.toLocaleDateString("ru-RU", { day: "2-digit", month: "long", year: "numeric" });
-  const lines: string[] = [`<b>Ежедневный отчёт — ${dateStr}</b>`, ""];
-
-  let paidCount: number | null = null;
-
-  KEY_REPORT_FIELD_IDS.forEach((id, i) => {
-    const field = findField(id)!;
-    const raw = res.data.valueRanges?.[i]?.values?.[0]?.[0];
-    const value = raw === undefined || raw === "" ? null : raw;
-    if (id === "paid_items_count") paidCount = value === null ? 0 : Number(value);
-    lines.push(`• ${field.label}: <b>${value ?? "—"}</b>`);
-  });
-
-  if (paidCount === 0) {
-    lines.push("", "⚠️ <b>Пополнения сегодня не было !!!</b>");
+  let rows: string[][];
+  try {
+    rows = await readRange(bridgeId, `'${BRIDGE_TAB}'!A:BL`);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "Не удалось прочитать таблицу-мост ОЗЛ. Проверьте доступ и формулу IMPORTRANGE.", detail: String(e?.message ?? e) },
+      { status: 500 }
+    );
   }
 
-  await sendTelegramMessage(lines.join("\n"));
+  const dataRows = rows.length > 1 ? rows.slice(1) : [];
+  const { html, count } = buildReport(dataRows);
 
-  // Отмечаем в таблице, что отчёт сдан
-  await sheets.spreadsheets.values.update({
-    spreadsheetId,
-    range: cellA1(tabTitle, REPORT_SUBMITTED_ROW, day),
-    valueInputOption: "USER_ENTERED",
-    requestBody: { values: [[true]] },
-  });
+  await sendTelegramMessage(html);
 
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, count });
+}
+
+export async function GET(req: NextRequest) {
+  const authError = requireTelegramAuth(req);
+  if (authError) return authError;
+
+  const bridgeId = getOzlBridgeId();
+  let rows: string[][];
+  try {
+    rows = await readRange(bridgeId, `'${BRIDGE_TAB}'!A:BL`);
+  } catch (e: any) {
+    return NextResponse.json(
+      { error: "Не удалось прочитать таблицу-мост ОЗЛ.", detail: String(e?.message ?? e) },
+      { status: 500 }
+    );
+  }
+
+  const dataRows = rows.length > 1 ? rows.slice(1) : [];
+  const { html, count } = buildReport(dataRows);
+  return NextResponse.json({ html, count });
 }
