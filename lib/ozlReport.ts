@@ -103,11 +103,7 @@ function buildSnapshotLine(row: string[]): ReportLine | null {
     const bd = firstDate(row[COL.bdDate]);
     if (!bd) return { text: `${head(row)}, дата отправки на склад не указана`, bold: false };
     const planned = addDays(bd, -1);
-    if (diffDays(t, planned) < 0) {
-      return { text: `⏰${head(row)}, товар ещё не получен на складе, стоит статус Должен быть на складе`, bold: true };
-    } else {
-      return { text: `${head(row)}, отправлен на склад ${formatRuDate(planned)}`, bold: false };
-    }
+    return { text: `${head(row)}, отправлен на склад ${formatRuDate(planned)}`, bold: false };
   }
 
   return null;
