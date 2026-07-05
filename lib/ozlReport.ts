@@ -88,16 +88,14 @@ function buildSnapshotLine(row: string[]): ReportLine | null {
     }
   }
   if (status === STATUS.factoryReplace) {
-    const bl = firstDate(row[COL.blDate]);
-    if (!bl) return { text: `${head(row)}, плановая дата не указана`, bold: false };
-    const planned = addDays(bl, 7);
-    if (diffDays(t, planned) <= -1) {
-      const last = lastDate(row[COL.atDates]);
-      const d = last ?? planned;
-      return { text: `❗${head(row)}, поставщик задерживает отправку, плановая дата ${formatRuDate(d)}`, bold: true };
+    const last = lastDate(row[COL.atDates]);
+    if (!last) return { text: `${head(row)}, плановая дата не указана`, bold: false };
+    if (diffDays(t, last) > 0) {
+      return { text: `${head(row)}, плановая дата ${formatRuDate(last)}`, bold: false };
     } else {
-      return { text: `${head(row)}, плановая дата ${formatRuDate(planned)}`, bold: false };
+      return { text: `❗${head(row)}, поставщик задерживает отправку, плановая дата ${formatRuDate(last)}`, bold: true };
     }
+  }
   }
   if (status === STATUS.shouldBeWarehouse) {
     const bd = firstDate(row[COL.bdDate]);
