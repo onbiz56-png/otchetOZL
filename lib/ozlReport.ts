@@ -76,6 +76,7 @@ function head(row: string[]): string {
 function buildSnapshotLine(row: string[]): ReportLine | null {
   const status = normStatus(row[COL.status]);
   const t = today();
+
   if (status === STATUS.bought) {
     const first = firstDate(row[COL.atDates]);
     const last = lastDate(row[COL.atDates]);
@@ -87,6 +88,7 @@ function buildSnapshotLine(row: string[]): ReportLine | null {
       return { text: `❗${head(row)}, поставщик задерживает отправку, плановая дата ${formatRuDate(d)}`, bold: true };
     }
   }
+
   if (status === STATUS.factoryReplace) {
     const last = lastDate(row[COL.atDates]);
     if (!last) return { text: `${head(row)}, плановая дата не указана`, bold: false };
@@ -96,7 +98,7 @@ function buildSnapshotLine(row: string[]): ReportLine | null {
       return { text: `❗${head(row)}, поставщик задерживает отправку, плановая дата ${formatRuDate(last)}`, bold: true };
     }
   }
-  }
+
   if (status === STATUS.shouldBeWarehouse) {
     const bd = firstDate(row[COL.bdDate]);
     if (!bd) return { text: `${head(row)}, дата отправки на склад не указана`, bold: false };
@@ -107,6 +109,7 @@ function buildSnapshotLine(row: string[]): ReportLine | null {
       return { text: `${head(row)}, отправлен на склад ${formatRuDate(planned)}`, bold: false };
     }
   }
+
   return null;
 }
 
