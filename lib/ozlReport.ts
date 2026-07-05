@@ -1,17 +1,7 @@
-// Логика отчёта ОЗЛ.
-
 export const COL = {
-  order: 0,     // A
-  status: 2,    // C
-  comment: 15,  // P
-  category: 31, // AF
-  brand: 33,    // AH
-  atDates: 45,  // AT
-  bdDate: 55,   // BD
-  blDate: 63,   // BL
+  order: 0, status: 2, comment: 15, category: 31, brand: 33, atDates: 45, bdDate: 55, blDate: 63,
 } as const;
 
-// Эталонные статусы (в нижнем регистре, сравнение регистронезависимое).
 export const STATUS = {
   bought: "выкуплен",
   factoryReplace: "замена на фабрике",
@@ -19,14 +9,8 @@ export const STATUS = {
   qcFailed: "не прошел контроль качества",
 } as const;
 
-// Нормализация статуса для сравнения: нижний регистр, ё->е, схлопнуть пробелы.
 function normStatus(s: string): string {
-  return (s || "")
-    .toString()
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/\s+/g, " ")
-    .trim();
+  return (s || "").toString().toLowerCase().replace(/ё/g, "е").replace(/\s+/g, " ").trim();
 }
 
 export function parseRuDate(s: string): Date | null {
@@ -47,10 +31,7 @@ export function formatRuDate(d: Date): string {
 
 export function extractDates(cell: string | undefined): Date[] {
   if (!cell) return [];
-  return String(cell)
-    .split(/[\n\r]+/)
-    .map((line) => parseRuDate(line))
-    .filter((d): d is Date => d !== null);
+  return String(cell).split(/[\n\r]+/).map((line) => parseRuDate(line)).filter((d): d is Date => d !== null);
 }
 
 export function firstDate(cell: string | undefined): Date | null {
@@ -66,14 +47,11 @@ export function today(): Date {
   const n = new Date();
   return new Date(n.getFullYear(), n.getMonth(), n.getDate());
 }
-
 export function addDays(d: Date, n: number): Date {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 }
-
 export function diffDays(a: Date, b: Date): number {
-  const MS = 24 * 60 * 60 * 1000;
-  return Math.round((b.getTime() - a.getTime()) / MS);
+  return Math.round((b.getTime() - a.getTime()) / 86400000);
 }
 
 export function lastPurchasingComment(cell: string | undefined): string | null {
@@ -85,10 +63,7 @@ export function lastPurchasingComment(cell: string | undefined): string | null {
   return null;
 }
 
-export interface ReportLine {
-  text: string;
-  bold: boolean;
-}
+export interface ReportLine { text: string; bold: boolean; }
 
 function head(row: string[]): string {
   const order = (row[COL.order] || "").toString().trim();
@@ -98,16 +73,13 @@ function head(row: string[]): string {
   return `#${order} — ${parts}`.replace(/ —\s*$/, "");
 }
 
-export function buildLine(row: string[]): ReportLine | null {
+function buildSnapshotLine(row: string[]): ReportLine | null {
   const status = normStatus(row[COL.status]);
   const t = today();
-
- if (status === STATUS.bought) {
+  if (status === STATUS.bought) {
     const first = firstDate(row[COL.atDates]);
     const last = lastDate(row[COL.atDates]);
-    if (!first) {
-      return { text: `${head(row)}, плановая дата не указана`, bold: false };
-    }
+    if (!first) return { text: `${head(row)}, плановая дата не указана`, bold: false };
     if (diffDays(t, first) > 0) {
       return { text: `${head(row)}, плановая дата ${formatRuDate(first)}`, bold: false };
     } else {
@@ -117,7 +89,7 @@ export function buildLine(row: string[]): ReportLine | null {
   }
   if (status === STATUS.factoryReplace) {
     const bl = firstDate(row[COL.blDate]);
-    if (!bl) return null;
+    if (!bl) return { text: `${head(row)}, плановая дата не указана`, bold: false };
     const planned = addDays(bl, 7);
     if (diffDays(t, planned) <= -1) {
       const last = lastDate(row[COL.atDates]);
@@ -127,10 +99,9 @@ export function buildLine(row: string[]): ReportLine | null {
       return { text: `${head(row)}, плановая дата ${formatRuDate(planned)}`, bold: false };
     }
   }
-
   if (status === STATUS.shouldBeWarehouse) {
     const bd = firstDate(row[COL.bdDate]);
-    if (!bd) return null;
+    if (!bd) return { text: `${head(row)}, дата отправки на склад не указана`, bold: false };
     const planned = addDays(bd, -1);
     if (diffDays(t, planned) < 0) {
       return { text: `⏰${head(row)}, товар ещё не получен на складе, стоит статус Должен быть на складе`, bold: true };
@@ -138,51 +109,64 @@ export function buildLine(row: string[]): ReportLine | null {
       return { text: `${head(row)}, отправлен на склад ${formatRuDate(planned)}`, bold: false };
     }
   }
-
-  if (status === STATUS.qcFailed) {
-    const comment = lastPurchasingComment(row[COL.comment]);
-    if (!comment) return null;
-    return { text: `${head(row)}, ${comment}`, bold: false };
-  }
-
   return null;
 }
 
-const GROUP_ORDER: { status: string; title: string }[] = [
+const SNAPSHOT_GROUPS = [
   { status: STATUS.bought, title: "ВЫКУПЛЕН" },
   { status: STATUS.factoryReplace, title: "ЗАМЕНА НА ФАБРИКЕ" },
   { status: STATUS.shouldBeWarehouse, title: "ДОЛЖЕН БЫТЬ НА СКЛАДЕ" },
-  { status: STATUS.qcFailed, title: "НЕ ПРОШЁЛ КОНТРОЛЬ КАЧЕСТВА" },
 ];
 
-export function buildReport(rows: string[][]): { html: string; count: number } {
+function esc(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+export function buildReport(rows: string[][], morningQcOrders: Set<string>): { html: string; count: number } {
   const t = today();
   const dateStr = `${String(t.getDate()).padStart(2, "0")}.${String(t.getMonth() + 1).padStart(2, "0")}`;
-
   const groups: Record<string, string[]> = {};
   let total = 0;
 
   for (const row of rows) {
-    const status = normStatus(row[COL.status]);
-    const line = buildLine(row);
+    const line = buildSnapshotLine(row);
     if (!line) continue;
+    const status = normStatus(row[COL.status]);
     if (!groups[status]) groups[status] = [];
-    groups[status].push(line.bold ? `<b>${escapeHtml(line.text)}</b>` : escapeHtml(line.text));
+    groups[status].push(line.bold ? `<b>${esc(line.text)}</b>` : esc(line.text));
     total++;
   }
 
-  const parts: string[] = [`<b>Отчёт ОЗЛ · ${dateStr}</b>`];
-  for (const g of GROUP_ORDER) {
-    const lines = groups[g.status];
-    if (lines && lines.length) {
-      parts.push("", `<b>${g.title}</b>`, ...lines);
+  const qcInWork: string[] = [];
+  const qcProcessed: string[] = [];
+
+  for (const row of rows) {
+    if (normStatus(row[COL.status]) === STATUS.qcFailed) {
+      const comment = lastPurchasingComment(row[COL.comment]);
+      const c = comment ? `, ${comment}` : "";
+      qcInWork.push(esc(`${head(row)}${c}`));
     }
   }
+  for (const row of rows) {
+    const order = (row[COL.order] || "").toString().trim();
+    const status = normStatus(row[COL.status]);
+    if (morningQcOrders.has(order) && status !== STATUS.qcFailed) {
+      const comment = lastPurchasingComment(row[COL.comment]);
+      const curStatus = (row[COL.status] || "").toString().trim();
+      const c = comment ? `, ${comment}` : "";
+      qcProcessed.push(esc(`${head(row)}, ${curStatus}${c}`));
+    }
+  }
+
+  const parts: string[] = [`<b>Отчёт ОЗЛ · ${dateStr}</b>`];
+  for (const g of SNAPSHOT_GROUPS) {
+    const lines = groups[g.status];
+    if (lines && lines.length) parts.push("", `<b>${g.title}</b>`, ...lines);
+  }
+  if (qcProcessed.length) parts.push("", `<b>НЕ ПРОШЁЛ КК — обработано за день (${qcProcessed.length})</b>`, ...qcProcessed);
+  if (qcInWork.length) parts.push("", `<b>НЕ ПРОШЁЛ КК — ещё в работе (${qcInWork.length})</b>`, ...qcInWork);
+
+  total += qcProcessed.length + qcInWork.length;
   parts.push("", `Всего: ${total}`);
-
   return { html: parts.join("\n"), count: total };
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
